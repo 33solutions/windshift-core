@@ -165,11 +165,17 @@ func (h *OAuthHandler) RegisterDynamicClient(w http.ResponseWriter, r *http.Requ
 }
 
 func validateDynamicRegistration(req *dynamicClientRegistrationRequest) error {
-	if req.TokenEndpointAuthMethod == "" {
+	// Dynamically registered clients are always public (PKCE S256, no secret).
+	// A client that asks for a secret-based method (Claude asks for
+	// client_secret_post) is still registered as public: RFC 7591 §3.2.1 lets
+	// the server replace requested metadata, and the response tells the client
+	// the method actually registered ("none"). Refusing instead breaks clients
+	// that follow the advertised token_endpoint_auth_methods_supported.
+	switch req.TokenEndpointAuthMethod {
+	case "", "none", "client_secret_post", "client_secret_basic":
 		req.TokenEndpointAuthMethod = "none"
-	}
-	if req.TokenEndpointAuthMethod != "none" {
-		return fmt.Errorf("token_endpoint_auth_method must be 'none'")
+	default:
+		return fmt.Errorf("token_endpoint_auth_method must be 'none', 'client_secret_post' or 'client_secret_basic'")
 	}
 	if !validDynamicGrantTypes(req.GrantTypes) {
 		return fmt.Errorf("grant_types must contain authorization_code and may contain refresh_token")
